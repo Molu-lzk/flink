@@ -18,20 +18,17 @@
 
 package org.apache.flink.table.utils
 
+import java.lang.{Iterable => JIterable}
+import java.util.Optional
 import org.apache.flink.api.common.JobExecutionResult
-import org.apache.flink.api.common.typeinfo.TypeInformation
-import org.apache.flink.table.api.{Table, TableConfig, TableEnvironment, TableResult}
+import org.apache.flink.table.api.{ExplainDetail, StatementSet, Table, TableConfig, TableEnvironment, TableResult}
 import org.apache.flink.table.catalog.Catalog
 import org.apache.flink.table.descriptors.{ConnectTableDescriptor, ConnectorDescriptor}
 import org.apache.flink.table.expressions.Expression
 import org.apache.flink.table.functions.{ScalarFunction, UserDefinedFunction}
-import org.apache.flink.table.module.Module
-import org.apache.flink.table.sinks.TableSink
+import org.apache.flink.table.module.{Module, ModuleEntry}
 import org.apache.flink.table.sources.TableSource
-import org.apache.flink.table.types.DataType
-
-import java.lang.{Iterable => JIterable}
-import java.util.Optional
+import org.apache.flink.table.types.AbstractDataType
 
 class MockTableEnvironment extends TableEnvironment {
 
@@ -41,15 +38,6 @@ class MockTableEnvironment extends TableEnvironment {
 
   override def registerTable(name: String, table: Table): Unit = ???
 
-  override def registerTableSource(name: String, tableSource: TableSource[_]): Unit = ???
-
-  override def registerTableSink(
-    name: String,
-    fieldNames: Array[String],
-    fieldTypes: Array[TypeInformation[_]], tableSink: TableSink[_]): Unit = ???
-
-  override def registerTableSink(name: String, configuredSink: TableSink[_]): Unit = ???
-
   override def scan(tablePath: String*): Table = ???
 
   override def connect(connectorDescriptor: ConnectorDescriptor): ConnectTableDescriptor = ???
@@ -58,9 +46,13 @@ class MockTableEnvironment extends TableEnvironment {
 
   override def listModules(): Array[String] = ???
 
+  override def listFullModules(): Array[ModuleEntry] = ???
+
   override def listDatabases(): Array[String] = ???
 
   override def listTables(): Array[String] = ???
+
+  override def listViews(): Array[String] = ???
 
   override def listUserDefinedFunctions(): Array[String] = ???
 
@@ -72,11 +64,15 @@ class MockTableEnvironment extends TableEnvironment {
 
   override def explain(extended: Boolean): String = ???
 
+  override def explainSql(statement: String, extraDetails: ExplainDetail*): String = ???
+
   override def getCompletionHints(statement: String, position: Int): Array[String] = ???
 
   override def sqlQuery(query: String): Table = ???
 
   override def executeSql(statement: String): TableResult = ???
+
+  override def createStatementSet(): StatementSet = ???
 
   override def sqlUpdate(stmt: String): Unit = ???
 
@@ -106,6 +102,8 @@ class MockTableEnvironment extends TableEnvironment {
   override def execute(jobName: String): JobExecutionResult = ???
 
   override def loadModule(moduleName: String, module: Module): Unit = ???
+
+  override def useModules(moduleNames: String*): Unit = ???
 
   override def unloadModule(moduleName: String): Unit = ???
 
@@ -155,9 +153,9 @@ class MockTableEnvironment extends TableEnvironment {
 
   override def fromValues(expression: Expression*): Table = ???
 
-  override def fromValues(rowType: DataType, values: Expression*): Table = ???
+  override def fromValues(rowType: AbstractDataType[_], values: Expression*): Table = ???
 
   override def fromValues(values: JIterable[_]): Table = ???
 
-  override def fromValues(rowType: DataType, values: JIterable[_]): Table = ???
+  override def fromValues(rowType: AbstractDataType[_], values: JIterable[_]): Table = ???
 }
