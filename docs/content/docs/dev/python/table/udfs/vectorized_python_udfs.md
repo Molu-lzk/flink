@@ -1,6 +1,6 @@
 ---
 title: "Vectorized User-defined Functions"
-weight: 2
+weight: 10
 type: docs
 aliases:
   - /dev/python/table-api-users-guide/udfs/vectorized_python_udfs.html
@@ -33,7 +33,7 @@ These Python libraries are highly optimized and provide high-performance data st
 [non-vectorized user-defined functions]({{< ref "docs/dev/python/table/udfs/python_udfs" >}}) on how to define vectorized user-defined functions.
 Users only need to add an extra parameter `func_type="pandas"` in the decorator `udf` or `udaf` to mark it as a vectorized user-defined function.
 
-**NOTE:** Python UDF execution requires Python version (3.5, 3.6, 3.7 or 3.8) with PyFlink installed. It's required on both the client side and the cluster side. 
+**NOTE:** Python UDF execution requires Python version (3.6, 3.7 or 3.8) with PyFlink installed. It's required on both the client side and the cluster side. 
 
 ## Vectorized Scalar Functions
 
@@ -53,7 +53,7 @@ and use it in a query:
 def add(i, j):
   return i + j
 
-settings = EnvironmentSettings.new_instance().in_batch_mode().use_blink_planner().build()
+settings = EnvironmentSettings.in_batch_mode()
 table_env = TableEnvironment.create(settings)
 
 # use the vectorized Python scalar function in Python Table API
@@ -86,7 +86,7 @@ and use it in `GroupBy Aggregation`, `GroupBy Window Aggregation` and `Over Wind
 def mean_udaf(v):
     return v.mean()
 
-settings = EnvironmentSettings.new_instance().in_batch_mode().use_blink_planner().build()
+settings = EnvironmentSettings.in_batch_mode()
 table_env = TableEnvironment.create(settings)
 
 my_table = ...  # type: Table, table schema: [a: String, b: BigInt, c: BigInt]

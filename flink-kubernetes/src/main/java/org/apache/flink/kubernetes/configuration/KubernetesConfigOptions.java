@@ -21,6 +21,7 @@ package org.apache.flink.kubernetes.configuration;
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.annotation.docs.Documentation;
 import org.apache.flink.configuration.ConfigOption;
+import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.ExternalResourceOptions;
 import org.apache.flink.configuration.description.Description;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -159,13 +160,6 @@ public class KubernetesConfigOptions {
                     .defaultValue("default")
                     .withDescription(
                             "The namespace that will be used for running the jobmanager and taskmanager pods.");
-
-    public static final ConfigOption<String> CONTAINER_START_COMMAND_TEMPLATE =
-            key("kubernetes.container-start-command-template")
-                    .stringType()
-                    .defaultValue("%java% %classpath% %jvmmem% %jvmopts% %logging% %class% %args%")
-                    .withDescription(
-                            "Template for the kubernetes jobmanager and taskmanager container start invocation.");
 
     public static final ConfigOption<Map<String, String>> JOB_MANAGER_LABELS =
             key("kubernetes.jobmanager.labels")
@@ -418,6 +412,25 @@ public class KubernetesConfigOptions {
                                     + "' and '"
                                     + TASK_MANAGER_POD_TEMPLATE.key()
                                     + "' for jobmanager and taskmanager respectively.");
+
+    public static final ConfigOption<Integer> KUBERNETES_CLIENT_IO_EXECUTOR_POOL_SIZE =
+            ConfigOptions.key("kubernetes.client.io-pool.size")
+                    .intType()
+                    .defaultValue(4)
+                    .withDescription(
+                            "The size of the IO executor pool used by the Kubernetes client to execute blocking IO operations "
+                                    + "(e.g. start/stop TaskManager pods, update leader related ConfigMaps, etc.). "
+                                    + "Increasing the pool size allows to run more IO operations concurrently.");
+
+    public static final ConfigOption<Integer> KUBERNETES_JOBMANAGER_REPLICAS =
+            key("kubernetes.jobmanager.replicas")
+                    .intType()
+                    .defaultValue(1)
+                    .withDescription(
+                            "Specify how many JobManager pods will be started simultaneously. "
+                                    + "Configure the value to greater than 1 to start standby JobManagers. "
+                                    + "It will help to achieve faster recovery. "
+                                    + "Notice that high availability should be enabled when starting standby JobManagers.");
 
     private static String getDefaultFlinkImage() {
         // The default container image that ties to the exact needed versions of both Flink and

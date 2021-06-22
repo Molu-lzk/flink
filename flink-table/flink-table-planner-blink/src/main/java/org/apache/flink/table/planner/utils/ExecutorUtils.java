@@ -22,12 +22,12 @@ import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.api.dag.Transformation;
 import org.apache.flink.runtime.jobgraph.JobType;
-import org.apache.flink.runtime.jobgraph.ScheduleMode;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.graph.GlobalDataExchangeMode;
 import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.streaming.api.graph.StreamGraphGenerator;
 import org.apache.flink.table.api.TableConfig;
+import org.apache.flink.util.TernaryBoolean;
 
 import java.util.List;
 
@@ -45,6 +45,7 @@ public class ExecutorUtils {
                 new StreamGraphGenerator(
                                 transformations, execEnv.getConfig(), execEnv.getCheckpointConfig())
                         .setStateBackend(execEnv.getStateBackend())
+                        .setChangelogStateBackendEnabled(execEnv.isChangelogStateBackendEnabled())
                         .setSavepointDir(execEnv.getDefaultSavepointDirectory())
                         .setChaining(execEnv.isChainingEnabled())
                         .setUserArtifacts(execEnv.getCachedFiles())
@@ -73,8 +74,8 @@ public class ExecutorUtils {
         // LAZY_FROM_SOURCES_WITH_BATCH_SLOT_REQUEST is only supported by the Batch scheduler (=Ng
         // scheduler)
         streamGraph.setJobType(JobType.BATCH);
-        streamGraph.setScheduleMode(ScheduleMode.LAZY_FROM_SOURCES_WITH_BATCH_SLOT_REQUEST);
         streamGraph.setStateBackend(null);
+        streamGraph.setChangelogStateBackendEnabled(TernaryBoolean.FALSE);
         streamGraph.setCheckpointStorage(null);
         if (streamGraph.getCheckpointConfig().isCheckpointingEnabled()) {
             throw new IllegalArgumentException("Checkpoint is not supported for batch jobs.");

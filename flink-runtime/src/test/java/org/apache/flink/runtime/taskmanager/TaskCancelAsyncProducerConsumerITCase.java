@@ -34,13 +34,14 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
 import org.apache.flink.runtime.jobgraph.JobGraph;
+import org.apache.flink.runtime.jobgraph.JobGraphTestUtils;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
 import org.apache.flink.runtime.minicluster.MiniCluster;
-import org.apache.flink.runtime.testingUtils.TestingUtils;
 import org.apache.flink.runtime.testutils.MiniClusterResource;
 import org.apache.flink.runtime.testutils.MiniClusterResourceConfiguration;
+import org.apache.flink.runtime.testutils.TestingUtils;
 import org.apache.flink.types.LongValue;
 import org.apache.flink.util.TestLogger;
 
@@ -107,7 +108,7 @@ public class TaskCancelAsyncProducerConsumerITCase extends TestLogger {
         producer.setSlotSharingGroup(slot);
         consumer.setSlotSharingGroup(slot);
 
-        JobGraph jobGraph = new JobGraph(producer, consumer);
+        JobGraph jobGraph = JobGraphTestUtils.streamingJobGraph(producer, consumer);
 
         final MiniCluster flink = MINI_CLUSTER_RESOURCE.getMiniCluster();
 

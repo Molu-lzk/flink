@@ -1,6 +1,6 @@
 ---
 title: "DROP Statements"
-weight: 4
+weight: 5
 type: docs
 aliases:
   - /dev/table/sql/drop.html
@@ -69,8 +69,7 @@ The following examples show how to run a DROP statement in SQL CLI.
 {{< tabs "18a7ab59-662f-45e4-9c5e-a6d96f69388b" >}}
 {{< tab "Java" >}}
 ```java
-EnvironmentSettings settings = EnvironmentSettings.newInstance()...
-TableEnvironment tableEnv = TableEnvironment.create(settings);
+TableEnvironment tableEnv = TableEnvironment.create(...);
 
 // register a table named "Orders"
 tableEnv.executeSql("CREATE TABLE Orders (`user` BIGINT, product STRING, amount INT) WITH (...)");
@@ -89,8 +88,7 @@ String[] tables = tableEnv.listTables();
 {{< /tab >}}
 {{< tab "Scala" >}}
 ```scala
-val settings = EnvironmentSettings.newInstance()...
-val tableEnv = TableEnvironment.create(settings)
+val tableEnv = TableEnvironment.create(...)
 
 // register a table named "Orders"
 tableEnv.executeSql("CREATE TABLE Orders (`user` BIGINT, product STRING, amount INT) WITH (...)")
@@ -109,8 +107,7 @@ val tables = tableEnv.listTables()
 {{< /tab >}}
 {{< tab "Python" >}}
 ```python
-settings = EnvironmentSettings.new_instance()...
-table_env = TableEnvironment.create(settings)
+table_env = TableEnvironment.create(...)
 
 # a string array: ["Orders"]
 tables = table_env.list_tables()
@@ -144,10 +141,14 @@ Flink SQL> SHOW TABLES;
 ## DROP TABLE
 
 ```sql
-DROP TABLE [IF EXISTS] [catalog_name.][db_name.]table_name
+DROP [TEMPORARY] TABLE [IF EXISTS] [catalog_name.][db_name.]table_name
 ```
 
 Drop a table with the given table name. If the table to drop does not exist, an exception is thrown.
+
+**TEMPORARY**
+
+Drop temporary table that has catalog and database namespaces.
 
 **IF EXISTS**
 

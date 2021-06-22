@@ -29,6 +29,8 @@ import org.apache.flink.runtime.checkpoint.hooks.MasterHooks;
 import org.apache.flink.runtime.concurrent.Executors;
 import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
+import org.apache.flink.runtime.executiongraph.ExecutionGraph;
+import org.apache.flink.runtime.executiongraph.ExecutionGraphCheckpointPlanCalculatorContext;
 import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
 import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -65,6 +67,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
+import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
@@ -86,16 +89,20 @@ public class PendingCheckpointTest {
     private static final List<ExecutionVertex> TASKS_TO_COMMIT = new ArrayList<>();
     private static final ExecutionAttemptID ATTEMPT_ID = new ExecutionAttemptID();
 
+    public static final OperatorID OPERATOR_ID = new OperatorID();
+
+    public static final int PARALLELISM = 1;
+
+    public static final int MAX_PARALLELISM = 128;
+
     static {
         ExecutionJobVertex jobVertex = mock(ExecutionJobVertex.class);
         when(jobVertex.getOperatorIDs())
-                .thenReturn(
-                        Collections.singletonList(
-                                OperatorIDPair.generatedIDOnly(new OperatorID())));
+                .thenReturn(Collections.singletonList(OperatorIDPair.generatedIDOnly(OPERATOR_ID)));
 
         ExecutionVertex vertex = mock(ExecutionVertex.class);
-        when(vertex.getMaxParallelism()).thenReturn(128);
-        when(vertex.getTotalNumberOfParallelSubtasks()).thenReturn(1);
+        when(vertex.getMaxParallelism()).thenReturn(MAX_PARALLELISM);
+        when(vertex.getTotalNumberOfParallelSubtasks()).thenReturn(PARALLELISM);
         when(vertex.getJobVertex()).thenReturn(jobVertex);
 
         Execution execution = mock(Execution.class);
@@ -342,7 +349,10 @@ public class PendingCheckpointTest {
                         CheckpointProperties.forCheckpoint(
                                 CheckpointRetentionPolicy.NEVER_RETAIN_AFTER_TERMINATION));
         pending.acknowledgeTask(ATTEMPT_ID, null, mock(CheckpointMetrics.class), null);
-        Assert.assertTrue(pending.getOperatorStates().isEmpty());
+        final OperatorState expectedState =
+                new OperatorState(OPERATOR_ID, PARALLELISM, MAX_PARALLELISM);
+        Assert.assertEquals(
+                Collections.singletonMap(OPERATOR_ID, expectedState), pending.getOperatorStates());
     }
 
     /**
@@ -496,7 +506,9 @@ public class PendingCheckpointTest {
         assertEquals(TaskAcknowledgeResult.SUCCESS, ack2);
         assertEquals(0, checkpoint.getNumberOfNonAcknowledgedOperatorCoordinators());
         assertTrue(checkpoint.isFullyAcknowledged());
-        assertThat(checkpoint.getOperatorStates().keySet(), Matchers.contains(coord1.operatorId()));
+        assertThat(
+                checkpoint.getOperatorStates().keySet(),
+                Matchers.containsInAnyOrder(OPERATOR_ID, coord1.operatorId(), coord2.operatorId()));
     }
 
     @Test
@@ -533,6 +545,69 @@ public class PendingCheckpointTest {
 
         assertTrue(handle1.isDisposed());
         assertTrue(handle2.isDisposed());
+    }
+
+    @Test
+    public void testFinalizeCheckpointWithFullyFinishedOperators() throws Exception {
+        JobVertexID finishedJobVertexID = new JobVertexID();
+        JobVertexID runningJobVertexID = new JobVertexID();
+        OperatorID finishedOperatorID = new OperatorID();
+        OperatorID runningOperatorID = new OperatorID();
+
+        ExecutionGraph executionGraph =
+                new CheckpointCoordinatorTestingUtils.CheckpointExecutionGraphBuilder()
+                        .addJobVertex(
+                                finishedJobVertexID,
+                                1,
+                                256,
+                                Collections.singletonList(
+                                        OperatorIDPair.generatedIDOnly(finishedOperatorID)),
+                                true)
+                        .addJobVertex(
+                                runningJobVertexID,
+                                1,
+                                256,
+                                Collections.singletonList(
+                                        OperatorIDPair.generatedIDOnly(runningOperatorID)),
+                                true)
+                        .build();
+        executionGraph
+                .getJobVertex(finishedJobVertexID)
+                .getTaskVertices()[0]
+                .getCurrentExecutionAttempt()
+                .markFinished();
+        PendingCheckpoint pendingCheckpoint = createPendingCheckpoint(executionGraph);
+        assertThat(pendingCheckpoint.getCheckpointPlan().getFullyFinishedJobVertex().size(), is(1));
+        assertThat(
+                pendingCheckpoint
+                        .getCheckpointPlan()
+                        .getFullyFinishedJobVertex()
+                        .get(0)
+                        .getJobVertexId(),
+                is(finishedJobVertexID));
+
+        // Report the state for the running operator
+        ExecutionAttemptID runningTaskId =
+                executionGraph
+                        .getJobVertex(runningJobVertexID)
+                        .getTaskVertices()[0]
+                        .getCurrentExecutionAttempt()
+                        .getAttemptId();
+        TaskStateSnapshot taskStateSnapshot = new TaskStateSnapshot();
+        taskStateSnapshot.putSubtaskStateByOperatorID(
+                runningOperatorID, new OperatorSubtaskState());
+        TaskAcknowledgeResult result =
+                pendingCheckpoint.acknowledgeTask(
+                        runningTaskId, taskStateSnapshot, new CheckpointMetrics(), null);
+        assertThat(result, is(TaskAcknowledgeResult.SUCCESS));
+
+        CompletedCheckpoint completedCheckpoint =
+                pendingCheckpoint.finalizeCheckpoint(
+                        new CheckpointsCleaner(), () -> {}, Executors.directExecutor(), null);
+        assertThat(completedCheckpoint.getOperatorStates().size(), is(2));
+        OperatorState finishedOperatorState =
+                completedCheckpoint.getOperatorStates().get(finishedOperatorID);
+        assertThat(finishedOperatorState.isFullyFinished(), is(true));
     }
 
     // ------------------------------------------------------------------------
@@ -623,6 +698,40 @@ public class PendingCheckpointTest {
                 operatorCoordinators,
                 masterStateIdentifiers,
                 props,
+                location,
+                new CompletableFuture<>());
+    }
+
+    private PendingCheckpoint createPendingCheckpoint(ExecutionGraph executionGraph)
+            throws Exception {
+        DefaultCheckpointPlanCalculator checkpointPlanCalculator =
+                new DefaultCheckpointPlanCalculator(
+                        new JobID(),
+                        new ExecutionGraphCheckpointPlanCalculatorContext(executionGraph),
+                        executionGraph.getVerticesTopologically());
+        checkpointPlanCalculator.setAllowCheckpointsAfterTasksFinished(true);
+        CheckpointPlan checkpointPlan = checkpointPlanCalculator.calculateCheckpointPlan().get();
+
+        final Path checkpointDir = new Path(tmpFolder.newFolder().toURI());
+        final FsCheckpointStorageLocation location =
+                new FsCheckpointStorageLocation(
+                        LocalFileSystem.getSharedInstance(),
+                        checkpointDir,
+                        checkpointDir,
+                        checkpointDir,
+                        CheckpointStorageLocationReference.getDefault(),
+                        1024,
+                        4096);
+
+        return new PendingCheckpoint(
+                executionGraph.getJobID(),
+                0,
+                1,
+                checkpointPlan,
+                Collections.emptyList(),
+                Collections.emptyList(),
+                CheckpointProperties.forCheckpoint(
+                        CheckpointRetentionPolicy.NEVER_RETAIN_AFTER_TERMINATION),
                 location,
                 new CompletableFuture<>());
     }

@@ -174,7 +174,7 @@ public class YarnResourceManagerDriver extends AbstractResourceManagerDriver<Yar
             taskExecutorProcessSpecContainerResourcePriorityAdapter =
                     new TaskExecutorProcessSpecContainerResourcePriorityAdapter(
                             registerApplicationMasterResponse.getMaximumResourceCapability(),
-                            ExternalResourceUtils.getExternalResources(
+                            ExternalResourceUtils.getExternalResourceConfigurationKeys(
                                     flinkConfig,
                                     YarnConfigOptions.EXTERNAL_RESOURCE_YARN_CONFIG_KEY_SUFFIX));
         } catch (Exception e) {
@@ -188,7 +188,7 @@ public class YarnResourceManagerDriver extends AbstractResourceManagerDriver<Yar
     }
 
     @Override
-    public CompletableFuture<Void> terminate() {
+    public void terminate() throws Exception {
         // shut down all components
         Exception exception = null;
 
@@ -208,9 +208,9 @@ public class YarnResourceManagerDriver extends AbstractResourceManagerDriver<Yar
             }
         }
 
-        return exception == null
-                ? FutureUtils.completedVoidFuture()
-                : FutureUtils.completedExceptionally(exception);
+        if (exception != null) {
+            throw exception;
+        }
     }
 
     @Override

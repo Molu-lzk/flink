@@ -48,6 +48,7 @@ import org.apache.flink.api.java.typeutils.MissingTypeInfo;
 import org.apache.flink.api.java.typeutils.PojoTypeInfo;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.DeploymentOptions;
@@ -96,6 +97,7 @@ import org.apache.flink.util.InstantiationUtil;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.SplittableIterator;
 import org.apache.flink.util.StringUtils;
+import org.apache.flink.util.TernaryBoolean;
 import org.apache.flink.util.WrappingRuntimeException;
 
 import com.esotericsoftware.kryo.Serializer;
@@ -166,6 +168,9 @@ public class StreamExecutionEnvironment {
 
     /** The state backend used for storing k/v state and state snapshots. */
     private StateBackend defaultStateBackend;
+
+    /** Whether to enable ChangelogStateBackend, default value is unset. */
+    private TernaryBoolean changelogStateBackendEnabled = TernaryBoolean.UNDEFINED;
 
     /** The default savepoint directory used by the job. */
     private Path defaultSavepointDirectory;
@@ -542,13 +547,13 @@ public class StreamExecutionEnvironment {
         return checkpointCfg.isForceCheckpointing();
     }
 
-    /** Returns whether Unaligned Checkpoints are enabled. */
+    /** Returns whether unaligned checkpoints are enabled. */
     @PublicEvolving
     public boolean isUnalignedCheckpointsEnabled() {
         return checkpointCfg.isUnalignedCheckpointsEnabled();
     }
 
-    /** Returns whether Unaligned Checkpoints are force-enabled. */
+    /** Returns whether unaligned checkpoints are force-enabled. */
     @PublicEvolving
     public boolean isForceUnalignedCheckpoints() {
         return checkpointCfg.isForceUnalignedCheckpoints();
@@ -605,6 +610,55 @@ public class StreamExecutionEnvironment {
     @PublicEvolving
     public StateBackend getStateBackend() {
         return defaultStateBackend;
+    }
+
+    /**
+     * Enable the change log for current state backend. This change log allows operators to persist
+     * state changes in a very fine-grained manner. Currently, the change log only applies to keyed
+     * state, so non-keyed operator state and channel state are persisted as usual. The 'state' here
+     * refers to 'keyed state'. Details are as follows:
+     *
+     * <p>Stateful operators write the state changes to that log (logging the state), in addition to
+     * applying them to the state tables in RocksDB or the in-mem Hashtable.
+     *
+     * <p>An operator can acknowledge a checkpoint as soon as the changes in the log have reached
+     * the durable checkpoint storage.
+     *
+     * <p>The state tables are persisted periodically, independent of the checkpoints. We call this
+     * the materialization of the state on the checkpoint storage.
+     *
+     * <p>Once the state is materialized on checkpoint storage, the state changelog can be truncated
+     * to the corresponding point.
+     *
+     * <p>It establish a way to drastically reduce the checkpoint interval for streaming
+     * applications across state backends. For more details please check the FLIP-158.
+     *
+     * <p>If this method is not called explicitly, it means no preference for enabling the change
+     * log. Configs for change log enabling will override in different config levels
+     * (job/local/cluster).
+     *
+     * @param enabled true if enable the change log for state backend explicitly, otherwise disable
+     *     the change log.
+     * @return This StreamExecutionEnvironment itself, to allow chaining of function calls.
+     * @see #isChangelogStateBackendEnabled()
+     */
+    @PublicEvolving
+    public StreamExecutionEnvironment enableChangelogStateBackend(boolean enabled) {
+        this.changelogStateBackendEnabled = TernaryBoolean.fromBoolean(enabled);
+        return this;
+    }
+
+    /**
+     * Gets the enable status of change log for state backend.
+     *
+     * @return a {@link TernaryBoolean} for the enable status of change log for state backend. Could
+     *     be {@link TernaryBoolean#UNDEFINED} if user never specify this by calling {@link
+     *     #enableChangelogStateBackend(boolean)}.
+     * @see #enableChangelogStateBackend(boolean)
+     */
+    @PublicEvolving
+    public TernaryBoolean isChangelogStateBackendEnabled() {
+        return changelogStateBackendEnabled;
     }
 
     /**
@@ -851,6 +905,9 @@ public class StreamExecutionEnvironment {
         configuration
                 .getOptional(StreamPipelineOptions.TIME_CHARACTERISTIC)
                 .ifPresent(this::setStreamTimeCharacteristic);
+        configuration
+                .getOptional(CheckpointingOptions.ENABLE_STATE_CHANGE_LOG)
+                .ifPresent(this::enableChangelogStateBackend);
         Optional.ofNullable(loadStateBackend(configuration, classLoader))
                 .ifPresent(this::setStateBackend);
         configuration
@@ -1096,12 +1153,7 @@ public class StreamExecutionEnvironment {
         // must not have null elements and mixed elements
         FromElementsFunction.checkCollection(data, typeInfo.getTypeClass());
 
-        SourceFunction<OUT> function;
-        try {
-            function = new FromElementsFunction<>(typeInfo.createSerializer(getConfig()), data);
-        } catch (IOException e) {
-            throw new RuntimeException(e.getMessage(), e);
-        }
+        SourceFunction<OUT> function = new FromElementsFunction<>(data);
         return addSource(function, "Collection Source", typeInfo, Boundedness.BOUNDED)
                 .setParallelism(1);
     }
@@ -2030,6 +2082,7 @@ public class StreamExecutionEnvironment {
         return new StreamGraphGenerator(transformations, config, checkpointCfg, getConfiguration())
                 .setRuntimeExecutionMode(executionMode)
                 .setStateBackend(defaultStateBackend)
+                .setChangelogStateBackendEnabled(changelogStateBackendEnabled)
                 .setSavepointDir(defaultSavepointDirectory)
                 .setChaining(isChainingEnabled)
                 .setUserArtifacts(cacheFile)

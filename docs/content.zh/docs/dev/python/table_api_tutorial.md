@@ -52,7 +52,7 @@ Apache Flink 提供 Table API 关系型 API 来统一处理流和批，即查询
 如果要继续我们的旅程，您需要一台具有以下功能的计算机：
 
 * Java 8 or 11
-* Python 3.5, 3.6 or 3.7
+* Python 3.6, 3.7 or 3.8
 
 使用Python Table API需要安装PyFlink，它已经被发布到 [PyPi](https://pypi.org/project/apache-flink/)，您可以通过如下方式安装PyFlink：
 
@@ -67,7 +67,7 @@ $ python -m pip install apache-flink
 编写Flink Python Table API程序的第一步是创建`TableEnvironment`。这是Python Table API作业的入口类。
 
 ```python
-settings = EnvironmentSettings.new_instance().in_batch_mode().use_blink_planner().build()
+settings = EnvironmentSettings.in_batch_mode()
 t_env = TableEnvironment.create(settings)
 ```
 
@@ -147,7 +147,7 @@ from pyflink.table import DataTypes, TableEnvironment, EnvironmentSettings
 from pyflink.table.descriptors import Schema, OldCsv, FileSystem
 from pyflink.table.expressions import lit
 
-settings = EnvironmentSettings.new_instance().in_batch_mode().use_blink_planner().build()
+settings = EnvironmentSettings.in_batch_mode()
 t_env = TableEnvironment.create(settings)
 
 # write all the data to one file
@@ -201,4 +201,4 @@ pyflink	1
 ```
 
 上述教程介绍了如何编写并运行一个Flink Python Table API程序，如果想了解Flink Python Table API
-的更多信息，可以参考[Flink Python API文档]({{ site.pythondocs_baseurl }}/api/python)。
+的更多信息，可以参考{{< pythondoc name="Flink Python API 文档">}}。

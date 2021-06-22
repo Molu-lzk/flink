@@ -18,6 +18,7 @@
 
 package org.apache.flink.table.planner.plan.rules.logical;
 
+import org.apache.flink.table.functions.python.PythonFunctionKind;
 import org.apache.flink.table.planner.plan.nodes.logical.FlinkLogicalCalc;
 import org.apache.flink.table.planner.plan.utils.PythonUtil;
 
@@ -76,6 +77,12 @@ public class PythonMapMergeRule extends RelOptRule {
                         .map(bottomProgram::expandLocalRef)
                         .collect(Collectors.toList());
         if (bottomProjects.size() != 1 || PythonUtil.isNonPythonCall(bottomProjects.get(0))) {
+            return false;
+        }
+
+        // Only Python Functions with same Python function kind can be merged together.
+        if (PythonUtil.isPythonCall(topProjects.get(0), PythonFunctionKind.GENERAL)
+                ^ PythonUtil.isPythonCall(bottomProjects.get(0), PythonFunctionKind.GENERAL)) {
             return false;
         }
 
